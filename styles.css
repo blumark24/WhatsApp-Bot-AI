@@ -1,0 +1,383 @@
+import { useState, useRef, useCallback } from 'react';
+import './styles.css';
+
+// ── Simulated AI processing functions ─────────────────────────────────────────
+
+function simulateSpellCheck(text) {
+  const corrections = [
+    { wrong: /انشاء/g, right: 'إنشاء' },
+    { wrong: /اكثر/g, right: 'أكثر' },
+    { wrong: /اقل/g, right: 'أقل' },
+    { wrong: /افضل/g, right: 'أفضل' },
+    { wrong: /احسن/g, right: 'أحسن' },
+    { wrong: /اهم/g, right: 'أهم' },
+    { wrong: /اول/g, right: 'أول' },
+    { wrong: /اخر/g, right: 'آخر' },
+    { wrong: /ايضا/g, right: 'أيضاً' },
+    { wrong: /دائما/g, right: 'دائماً' },
+    { wrong: /جدا/g, right: 'جداً' },
+    { wrong: /اذا/g, right: 'إذا' },
+    { wrong: /الا/g, right: 'إلا' },
+    { wrong: /ان /g, right: 'أن ' },
+    { wrong: /امام/g, right: 'أمام' },
+    { wrong: /اخبار/g, right: 'أخبار' },
+    { wrong: /اطفال/g, right: 'أطفال' },
+    { wrong: /استخدام/g, right: 'استخدام' },
+    { wrong: /  +/g, right: ' ' },
+  ];
+  let result = text;
+  for (const c of corrections) {
+    result = result.replace(c.wrong, c.right);
+  }
+  return result;
+}
+
+function simulateRephrase(text) {
+  const sentences = text.split(/[.،؟!]+/).filter(s => s.trim().length > 0);
+  const improved = sentences.map(s => {
+    const trimmed = s.trim();
+    if (trimmed.length < 5) return trimmed;
+    if (trimmed.startsWith('يمكن')) return trimmed.replace('يمكن', 'من المستطاع');
+    if (trimmed.startsWith('هذا')) return trimmed.replace('هذا', 'هذا الأمر');
+    if (trimmed.includes('مهم')) return trimmed.replace('مهم', 'بالغ الأهمية');
+    if (trimmed.includes('كبير')) return trimmed.replace('كبير', 'ضخم');
+    if (trimmed.includes('صغير')) return trimmed.replace('صغير', 'محدود الحجم');
+    return trimmed;
+  });
+  return improved.join('، ') + '.';
+}
+
+function simulateOrganize(text) {
+  const words = text.trim().split(/\s+/);
+  const sentences = [];
+  let current = [];
+  for (const word of words) {
+    current.push(word);
+    if (current.length >= 8 && (word.endsWith('.') || word.endsWith('،') || word.endsWith('؟'))) {
+      sentences.push(current.join(' '));
+      current = [];
+    }
+  }
+  if (current.length > 0) sentences.push(current.join(' '));
+  return sentences.join('\n');
+}
+
+function simulateFinalResult(text) {
+  let result = simulateSpellCheck(text);
+  result = simulateRephrase(result);
+  const paragraphs = result.split('\n').filter(p => p.trim().length > 0);
+  return paragraphs.map(p => '   ' + p.trim()).join('\n\n');
+}
+
+const SAMPLE_TEXT = `انشاء محتوى عربي مميز يعتبر من اهم المهارات في عصر التقنيه الحديثه. اذا اردنا تحقيق نتائج افضل علينا الاهتمام بجوده الكتابه والتدقيق الاملائي دائما. هذا يساعد كثيرا في تحسين الصوره الاحترافيه للمحتوى ويجعله اكثر تاثيرا على القارئ.`;
+
+// ── Toast hook ─────────────────────────────────────────────────────────────────
+
+function useToast() {
+  const [toast, setToast] = useState({ show: false, msg: '' });
+  const timerRef = useRef(null);
+
+  const showToast = useCallback((msg) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setToast({ show: true, msg });
+    timerRef.current = setTimeout(() => setToast({ show: false, msg: '' }), 2500);
+  }, []);
+
+  return { toast, showToast };
+}
+
+// ── Stats helper ───────────────────────────────────────────────────────────────
+
+function getStats(text) {
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const chars = text.length;
+  const sentences = (text.match(/[.،؟!]+/g) || []).length;
+  return { words, chars, sentences };
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [inputText, setInputText] = useState('');
+  const [resultText, setResultText] = useState('');
+  const [activeMode, setActiveMode] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef(null);
+  const { toast, showToast } = useToast();
+
+  const stats = getStats(inputText);
+  const resultStats = getStats(resultText);
+
+  const simulateDelay = (fn) => {
+    setLoading(true);
+    setResultText('');
+    setTimeout(() => {
+      const out = fn(inputText);
+      setResultText(out);
+      setLoading(false);
+    }, 800 + Math.random() * 600);
+  };
+
+  const actions = [
+    {
+      id: 'spell',
+      icon: '🔍',
+      label: 'تدقيق إملائي',
+      fn: simulateSpellCheck,
+    },
+    {
+      id: 'rephrase',
+      icon: '✍️',
+      label: 'تحسين الصياغة',
+      fn: simulateRephrase,
+    },
+    {
+      id: 'organize',
+      icon: '📐',
+      label: 'ترتيب الكلام',
+      fn: simulateOrganize,
+    },
+    {
+      id: 'final',
+      icon: '⚡',
+      label: 'النتيجة النهائية',
+      fn: simulateFinalResult,
+    },
+  ];
+
+  const handleAction = (action) => {
+    if (!inputText.trim()) {
+      showToast('أدخل نصاً أولاً');
+      return;
+    }
+    setActiveMode(action.id);
+    simulateDelay(action.fn);
+  };
+
+  const handleCopy = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('✅ تم النسخ بنجاح');
+    } catch {
+      showToast('تعذّر النسخ تلقائياً');
+    }
+  };
+
+  const handleDownload = (text, suffix) => {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `text-bot-${suffix}-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('⬇️ تم التحميل');
+  };
+
+  const handleFileRead = (file) => {
+    if (!file) return;
+    if (!file.name.endsWith('.txt')) {
+      showToast('الرجاء رفع ملف .txt فقط');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setInputText(e.target.result);
+      setResultText('');
+      setActiveMode(null);
+      showToast('📄 تم تحميل الملف بنجاح');
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    handleFileRead(file);
+  };
+
+  return (
+    <div className="app-wrapper">
+      {/* Header */}
+      <header className="app-header">
+        <div className="brand-badge">
+          <span className="brand-badge-dot" />
+          Blumark24 · MVP Demo
+        </div>
+        <h1 className="app-title">بوت التدقيق النصي الذكي</h1>
+        <p className="app-subtitle">
+          أداة ذكية لتدقيق النصوص العربية وتحسين صياغتها وترتيبها — جاهزة للتكامل مع واتساب والمنصات الرقمية
+        </p>
+      </header>
+
+      {/* Input Card */}
+      <div className="card">
+        <div className="card-label">النص المُدخَل</div>
+
+        <div className="quick-actions">
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              setInputText(SAMPLE_TEXT);
+              setResultText('');
+              setActiveMode(null);
+            }}
+          >
+            📝 نص تجريبي
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={() => {
+              setInputText('');
+              setResultText('');
+              setActiveMode(null);
+            }}
+            disabled={!inputText}
+          >
+            🗑 مسح
+          </button>
+          {inputText && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => handleCopy(inputText)}
+            >
+              📋 نسخ المدخل
+            </button>
+          )}
+          {inputText && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => handleDownload(inputText, 'input')}
+            >
+              ⬇️ تحميل TXT
+            </button>
+          )}
+        </div>
+
+        <div className="text-area-wrapper">
+          <textarea
+            className="main-textarea"
+            placeholder="اكتب أو الصق نصك العربي هنا..."
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            spellCheck={false}
+          />
+          <span className="char-count">{stats.chars} حرف</span>
+        </div>
+
+        {/* Stats */}
+        {inputText && (
+          <div className="stats-row" style={{ marginTop: 12 }}>
+            <div className="stat-chip"><strong>{stats.words}</strong> كلمة</div>
+            <div className="stat-chip"><strong>{stats.chars}</strong> حرف</div>
+            <div className="stat-chip"><strong>{stats.sentences}</strong> جملة</div>
+          </div>
+        )}
+
+        <div className="divider" />
+
+        {/* File Upload */}
+        <div
+          className={`upload-zone ${dragOver ? 'drag-over' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".txt"
+            onChange={(e) => handleFileRead(e.target.files?.[0])}
+          />
+          <div className="upload-icon">📂</div>
+          <div className="upload-text">اسحب ملف .txt أو انقر للتصفح</div>
+          <div className="upload-hint">يدعم ملفات النص العادي فقط</div>
+        </div>
+      </div>
+
+      {/* Processing Buttons */}
+      <div className="card">
+        <div className="card-label">أدوات المعالجة</div>
+        <div className="process-grid">
+          {actions.map((action) => (
+            <button
+              key={action.id}
+              className={`process-btn ${activeMode === action.id ? 'active' : ''}`}
+              onClick={() => handleAction(action)}
+              disabled={loading}
+            >
+              <span className="process-btn-icon">{action.icon}</span>
+              {action.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Result Card */}
+      <div className="card">
+        <div className="card-label">النتيجة</div>
+
+        {loading ? (
+          <div className="loading-row">
+            <div className="spinner" />
+            جارٍ المعالجة...
+          </div>
+        ) : resultText ? (
+          <>
+            <div className="compare-grid">
+              <div className="compare-panel">
+                <div className="compare-label original">النص الأصلي</div>
+                <div className="compare-text">{inputText}</div>
+              </div>
+              <div className="compare-panel">
+                <div className="compare-label processed">
+                  {actions.find(a => a.id === activeMode)?.label || 'النتيجة'}
+                </div>
+                <div className="compare-text">{resultText}</div>
+              </div>
+            </div>
+
+            {resultText && (
+              <div className="stats-row" style={{ marginTop: 12 }}>
+                <div className="stat-chip"><strong>{resultStats.words}</strong> كلمة</div>
+                <div className="stat-chip"><strong>{resultStats.chars}</strong> حرف</div>
+              </div>
+            )}
+
+            <div className="result-actions">
+              <button className="btn btn-primary" onClick={() => handleCopy(resultText)}>
+                📋 نسخ النتيجة
+              </button>
+              <button className="btn btn-success" onClick={() => handleDownload(resultText, 'result')}>
+                ⬇️ تحميل النتيجة
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => { setInputText(resultText); setResultText(''); setActiveMode(null); }}
+              >
+                🔄 استخدام كمدخل جديد
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className={`result-container ${resultText ? 'has-content' : ''}`}>
+            <div className="result-placeholder">
+              اختر أداة معالجة أعلاه لتظهر النتيجة هنا
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <footer className="app-footer">
+        <span className="footer-brand">Blumark24</span> · بوت التدقيق النصي الذكي · MVP Demo<br />
+        <span style={{ marginTop: 4, display: 'block' }}>مشروع رؤية 2030 · مصنوع بفخر في المملكة العربية السعودية 🇸🇦</span>
+      </footer>
+
+      {/* Toast */}
+      <div className={`toast ${toast.show ? 'show' : ''}`}>{toast.msg}</div>
+    </div>
+  );
+}
